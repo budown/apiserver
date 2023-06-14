@@ -27,7 +27,6 @@ import (
 	goruntime "runtime"
 	"runtime/debug"
 	"sort"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -38,7 +37,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -602,62 +600,67 @@ func completeOpenAPI(config *openapicommon.Config, version *version.Info) {
 func (c *Config) DrainedNotify() <-chan struct{} {
 	return c.lifecycleSignals.InFlightRequestsDrained.Signaled()
 }
-
-// Complete fills in any fields not set that are required to have valid data and can be derived
-// from other fields. If you're going to `ApplyOptions`, do that first. It's mutating the receiver.
-func (c *Config) Complete(informers informers.SharedInformerFactory) CompletedConfig {
-	if len(c.ExternalAddress) == 0 && c.PublicAddress != nil {
-		c.ExternalAddress = c.PublicAddress.String()
-	}
-
-	// if there is no port, and we listen on one securely, use that one
-	if _, _, err := net.SplitHostPort(c.ExternalAddress); err != nil {
-		if c.SecureServing == nil {
-			klog.Fatalf("cannot derive external address port without listening on a secure port.")
-		}
-		_, port, err := c.SecureServing.HostPort()
-		if err != nil {
-			klog.Fatalf("cannot derive external address from the secure port: %v", err)
-		}
-		c.ExternalAddress = net.JoinHostPort(c.ExternalAddress, strconv.Itoa(port))
-	}
-
-	completeOpenAPI(c.OpenAPIConfig, c.Version)
-	completeOpenAPI(c.OpenAPIV3Config, c.Version)
-
-	if c.DiscoveryAddresses == nil {
-		c.DiscoveryAddresses = discovery.DefaultAddresses{DefaultAddress: c.ExternalAddress}
-	}
-
-	AuthorizeClientBearerToken(c.LoopbackClientConfig, &c.Authentication, &c.Authorization)
-
+func (c *Config) Complete() {
 	if c.RequestInfoResolver == nil {
 		c.RequestInfoResolver = NewRequestInfoResolver(c)
 	}
-
-	if c.EquivalentResourceRegistry == nil {
-		if c.RESTOptionsGetter == nil {
-			c.EquivalentResourceRegistry = runtime.NewEquivalentResourceRegistry()
-		} else {
-			c.EquivalentResourceRegistry = runtime.NewEquivalentResourceRegistryWithIdentity(func(groupResource schema.GroupResource) string {
-				// use the storage prefix as the key if possible
-				if opts, err := c.RESTOptionsGetter.GetRESTOptions(groupResource); err == nil {
-					return opts.ResourcePrefix
-				}
-				// otherwise return "" to use the default key (parent GV name)
-				return ""
-			})
-		}
-	}
-
-	return CompletedConfig{&completedConfig{c, informers}}
 }
 
 // Complete fills in any fields not set that are required to have valid data and can be derived
 // from other fields. If you're going to `ApplyOptions`, do that first. It's mutating the receiver.
-func (c *RecommendedConfig) Complete() CompletedConfig {
-	return c.Config.Complete(c.SharedInformerFactory)
-}
+// func (c *Config) Complete(informers informers.SharedInformerFactory) CompletedConfig {
+// 	if len(c.ExternalAddress) == 0 && c.PublicAddress != nil {
+// 		c.ExternalAddress = c.PublicAddress.String()
+// 	}
+
+// 	// if there is no port, and we listen on one securely, use that one
+// 	if _, _, err := net.SplitHostPort(c.ExternalAddress); err != nil {
+// 		if c.SecureServing == nil {
+// 			klog.Fatalf("cannot derive external address port without listening on a secure port.")
+// 		}
+// 		_, port, err := c.SecureServing.HostPort()
+// 		if err != nil {
+// 			klog.Fatalf("cannot derive external address from the secure port: %v", err)
+// 		}
+// 		c.ExternalAddress = net.JoinHostPort(c.ExternalAddress, strconv.Itoa(port))
+// 	}
+
+// 	completeOpenAPI(c.OpenAPIConfig, c.Version)
+// 	completeOpenAPI(c.OpenAPIV3Config, c.Version)
+
+// 	if c.DiscoveryAddresses == nil {
+// 		c.DiscoveryAddresses = discovery.DefaultAddresses{DefaultAddress: c.ExternalAddress}
+// 	}
+
+// 	AuthorizeClientBearerToken(c.LoopbackClientConfig, &c.Authentication, &c.Authorization)
+
+// 	if c.RequestInfoResolver == nil {
+// 		c.RequestInfoResolver = NewRequestInfoResolver(c)
+// 	}
+
+// 	if c.EquivalentResourceRegistry == nil {
+// 		if c.RESTOptionsGetter == nil {
+// 			c.EquivalentResourceRegistry = runtime.NewEquivalentResourceRegistry()
+// 		} else {
+// 			c.EquivalentResourceRegistry = runtime.NewEquivalentResourceRegistryWithIdentity(func(groupResource schema.GroupResource) string {
+// 				// use the storage prefix as the key if possible
+// 				if opts, err := c.RESTOptionsGetter.GetRESTOptions(groupResource); err == nil {
+// 					return opts.ResourcePrefix
+// 				}
+// 				// otherwise return "" to use the default key (parent GV name)
+// 				return ""
+// 			})
+// 		}
+// 	}
+
+// 	return CompletedConfig{&completedConfig{c, informers}}
+// }
+
+// Complete fills in any fields not set that are required to have valid data and can be derived
+// from other fields. If you're going to `ApplyOptions`, do that first. It's mutating the receiver.
+// func (c *RecommendedConfig) Complete() CompletedConfig {
+// 	return c.Config.Complete(c.SharedInformerFactory)
+// }
 
 // New creates a new server which logically combines the handling chain with the passed server.
 // name is used to differentiate for logging. The handler chain in particular can be difficult as it starts delegating.
